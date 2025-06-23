@@ -99,6 +99,8 @@ func (o *OperationV3) ParseComment(comment string, astFile *ast.File) error {
 		return o.ParseServerURLComment(lineRemainder)
 	case "@servers.description":
 		return o.ParseServerDescriptionComment(lineRemainder)
+	case "@param.examples":
+		return o.ParseParamExamplesComment(lineRemainder)
 	default:
 		return o.ParseMetadata(attribute, lowerAttribute, lineRemainder)
 	}
@@ -754,6 +756,60 @@ func (o *OperationV3) ParseServerURLComment(commentLine string) error {
 func (o *OperationV3) ParseServerDescriptionComment(commentLine string) error {
 	lastAddedServer := o.Servers[len(o.Servers)-1]
 	lastAddedServer.Spec.Description = commentLine
+	return nil
+}
+
+func (o *OperationV3) ParseParamExamplesComment(commentLine string) error {
+	// The format of this line should be <paramSlug> <exampleSlug> <exampleField> <exampleFieldValue>
+	parserError := fmt.Errorf("invalid command line format for ParseParamExamplesComment: %s", commentLine)
+
+	commandLineParts := strings.Split(commentLine, " ")
+
+	if len(commandLineParts) < 4 {
+		return parserError
+	}
+
+	paramSlug := commandLineParts[0]
+	exampleSlug := commandLineParts[1]
+	exampleField := commandLineParts[2]
+	exampleFieldValue := strings.Join(commandLineParts[3:], " ")
+
+	if paramSlug == "" || exampleSlug == "" || exampleField == "" || exampleFieldValue == "" {
+		return parserError
+	}
+
+	currentParams := o.Operation.Parameters
+
+	for _, param := range currentParams {
+		if param.Spec.Spec.Name == paramSlug {
+			if param.Spec.Spec.Examples == nil {
+				param.Spec.Spec.Examples = make(map[string]*spec.RefOrSpec[spec.Extendable[spec.Example]])
+			}
+
+			var example *spec.Example
+			if _, exists := param.Spec.Spec.Examples[exampleSlug]; !exists {
+				example = &spec.Example{}
+			} else {
+				example = param.Spec.Spec.Examples[exampleSlug].Spec.Spec
+			}
+			switch strings.ToLower(exampleField) {
+			case "value":
+				example.Value = exampleFieldValue
+			case "summary":
+				example.Summary = exampleFieldValue
+			case "description":
+				example.Description = exampleFieldValue
+			default:
+				return fmt.Errorf("unknown example field %s", exampleField)
+			}
+			param.Spec.Spec.Examples[exampleSlug] = spec.NewRefOrSpec(nil, &spec.Extendable[spec.Example]{
+				Spec: example,
+			})
+
+			return nil
+		}
+	}
+
 	return nil
 }
 
