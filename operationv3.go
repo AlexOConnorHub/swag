@@ -810,6 +810,67 @@ func (o *OperationV3) ParseParamExamplesComment(commentLine string) error {
 		}
 	}
 
+	for _, mediaType := range o.RequestBody.Spec.Spec.Content {
+		if mediaType.Spec.Examples == nil {
+			mediaType.Spec.Examples = make(map[string]*spec.RefOrSpec[spec.Extendable[spec.Example]])
+		}
+
+		var example *spec.Example
+
+		if _, exists := mediaType.Spec.Examples[exampleSlug]; !exists {
+			example = &spec.Example{}
+		} else {
+			example = mediaType.Spec.Examples[exampleSlug].Spec.Spec
+		}
+		switch strings.ToLower(exampleField) {
+		case "value":
+			example.Value = exampleFieldValue
+		case "summary":
+			example.Summary = exampleFieldValue
+		case "description":
+			example.Description = exampleFieldValue
+		default:
+			return fmt.Errorf("unknown example field %s", exampleField)
+		}
+		mediaType.Spec.Examples[exampleSlug] = spec.NewRefOrSpec(nil, &spec.Extendable[spec.Example]{
+			Spec: example,
+		})
+	}
+
+	// For header examples, we need to iterate through the responses
+	for _, response := range o.Responses.Spec.Response {
+		if response.Spec.Spec.Headers == nil {
+			response.Spec.Spec.Headers = make(map[string]*spec.RefOrSpec[spec.Extendable[spec.Header]])
+		}
+
+		if header, exists := response.Spec.Spec.Headers[exampleSlug]; exists {
+			if header.Spec.Spec.Examples == nil {
+				header.Spec.Spec.Examples = make(map[string]*spec.RefOrSpec[spec.Extendable[spec.Example]])
+			}
+			var example *spec.Example
+			if _, exists := header.Spec.Spec.Examples[exampleSlug]; !exists {
+				example = &spec.Example{}
+			} else {
+				example = header.Spec.Spec.Examples[exampleSlug].Spec.Spec
+			}
+
+			switch strings.ToLower(exampleField) {
+			case "value":
+				example.Value = exampleFieldValue
+			case "summary":
+				example.Summary = exampleFieldValue
+			case "description":
+				example.Description = exampleFieldValue
+			default:
+				return fmt.Errorf("unknown example field %s", exampleField)
+			}
+			header.Spec.Spec.Examples[exampleSlug] = spec.NewRefOrSpec(nil, &spec.Extendable[spec.Example]{
+				Spec: example,
+			})
+			response.Spec.Spec.Headers[exampleSlug] = header
+		}
+	}
+
 	return nil
 }
 
